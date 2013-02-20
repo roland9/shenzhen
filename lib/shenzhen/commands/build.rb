@@ -24,7 +24,6 @@ command :build do |c|
     determine_workspace_or_project! unless @workspace || @project
 
     determine_configuration! unless @configuration
-    say_error "Configuration #{@configuration} not found" and abort unless @xcodebuild_info.build_configurations.include?(@configuration)
     
     determine_scheme! unless @scheme
     say_error "Scheme #{@scheme} not found" and abort unless @xcodebuild_info.schemes.include?(@scheme)
