@@ -19,27 +19,29 @@ command :build do |c|
     @xcodebuild_info = Shenzhen::XcodeBuild.info(:workspace => @workspace, :project => @project)
 
     @scheme = options.scheme
-    @configuration = options.configuration
 
     determine_workspace_or_project! unless @workspace || @project
 
-    determine_configuration! unless @configuration
-    say_error "Configuration #{@configuration} not found" and abort unless @xcodebuild_info.build_configurations.include?(@configuration)
-
     determine_scheme! unless @scheme
     say_error "Scheme #{@scheme} not found" and abort unless @xcodebuild_info.schemes.include?(@scheme)
-
-    say_warning "Building \"#{@workspace || @project}\" with Scheme \"#{@scheme}\" and Configuration \"#{@configuration}\"\n" unless options.quiet
-
-    log "xcodebuild", (@workspace || @project)
 
     flags = []
     flags << "-sdk iphoneos"
     flags << "-workspace '#{@workspace}'" if @workspace
     flags << "-project '#{@project}'" if @project
     flags << "-scheme '#{@scheme}'" if @scheme
+    
+    @configuration = options.configuration
+    @target, @xcodebuild_settings = Shenzhen::XcodeBuild.settings(*flags).detect{|target, settings| settings['WRAPPER_EXTENSION'] == "app"}
+    say_error "App settings could not be found." and abort unless @xcodebuild_settings
+    
+    @configuration ||= @xcodebuild_settings['CONFIGURATION']
     flags << "-configuration '#{@configuration}'"
+    
+    say_warning "Building \"#{@workspace || @project}\" with Scheme \"#{@scheme}\" and Configuration \"#{@configuration}\"\n" unless options.quiet
 
+    log "xcodebuild", (@workspace || @project)
+    
     actions = []
     actions << :clean unless options.clean == false
     actions << :build
@@ -47,9 +49,6 @@ command :build do |c|
 
     ENV['CC'] = nil # Fix for RVM
     abort unless system %{xcodebuild #{flags.join(' ')} #{actions.join(' ')} 1> /dev/null}
-
-    @target, @xcodebuild_settings = Shenzhen::XcodeBuild.settings(*flags).detect{|target, settings| settings['WRAPPER_EXTENSION'] == "app"}
-    say_error "App settings could not be found." and abort unless @xcodebuild_settings
 
     @app_path = File.join(@xcodebuild_settings['BUILT_PRODUCTS_DIR'], @xcodebuild_settings['WRAPPER_NAME'])
     @dsym_path = @app_path + ".dSYM"
@@ -103,18 +102,4 @@ command :build do |c|
     end
   end
 
-  def determine_configuration!
-    configurations = @xcodebuild_info.build_configurations rescue []
-    if configurations.nil? or configurations.empty? or configurations.include?("Debug")
-      @configuration = "Debug"
-    elsif configurations.length == 1
-      @configuration = configurations.first
-    end
-
-    if @configuration
-      say_warning "Configuration was not passed, defaulting to #{@configuration}"
-    else
-      @configuration = choose "Select a configuration:", *configurations
-    end
-  end
 end
